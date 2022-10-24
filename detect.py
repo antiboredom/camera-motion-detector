@@ -74,10 +74,10 @@ def make_empty(new_w, new_h):
     return empty
 
 
-def process(inp, gpu=False, show=False):
+def process(inp, gpu=False, show=False, overwrite=True):
     outname = inp + ".flow.csv"
 
-    if os.path.exists(outname):
+    if os.path.exists(outname) and not overwrite:
         print("Skipping", outname)
         return False
 
