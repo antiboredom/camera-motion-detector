@@ -74,7 +74,7 @@ def make_empty(new_w, new_h):
     return empty
 
 
-def process(inp, show=True):
+def process(inp, gpu=False, show=False):
     outname = inp + ".flow.csv"
 
     if os.path.exists(outname):
@@ -87,7 +87,6 @@ def process(inp, show=True):
     frame_num = 1
 
     frame1 = next(frames)
-
     h, w, _ = frame1.shape
     rect_w = 300
     rect_h = 300
@@ -113,51 +112,57 @@ def process(inp, show=True):
     total_frames = int(clip.fps * clip.duration)
     progress_bar = tqdm(total=total_frames)
 
-    # create optical flow instance
-    gpu_flow = cv.cuda_FarnebackOpticalFlow.create(
-        5,
-        0.5,
-        False,
-        15,
-        3,
-        5,
-        1.2,
-        0,
-    )
+    if gpu:
+        gpu_flow = cv.cuda_FarnebackOpticalFlow.create(
+            5,
+            0.5,
+            False,
+            15,
+            3,
+            5,
+            1.2,
+            0,
+        )
 
-    gpu_frame = cv.cuda_GpuMat()
-    gpu_prev = cv.cuda_GpuMat()
+        gpu_frame = cv.cuda_GpuMat()
+        gpu_prev = cv.cuda_GpuMat()
 
-    for frame2 in frames:
+    for frame in frames:
         frame_num += 1
         progress_bar.update(1)
 
-        frame2 = frame2[rect_y : rect_y + rect_h, rect_x : rect_x + rect_w]
-        next_frame = cv.cvtColor(frame2, cv.COLOR_BGR2GRAY)
+        frame = frame[rect_y : rect_y + rect_h, rect_x : rect_x + rect_w]
+        next_frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
 
-        gpu_frame.upload(next_frame)
-        gpu_prev.upload(prvs)
+        if gpu:
+            gpu_frame.upload(next_frame)
+            gpu_prev.upload(prvs)
 
-        # calculate optical flow
-        flow = cv.cuda_FarnebackOpticalFlow.calc(
-            gpu_flow,
-            gpu_prev,
-            gpu_frame,
-            None,
-        )
+            # calculate optical flow
+            flow = cv.cuda_FarnebackOpticalFlow.calc(
+                gpu_flow,
+                gpu_prev,
+                gpu_frame,
+                None,
+            )
 
-        flow_x = cv.cuda_GpuMat(flow.size(), cv.CV_32FC1)
-        flow_y = cv.cuda_GpuMat(flow.size(), cv.CV_32FC1)
-        cv.cuda.split(flow, [flow_x, flow_y])
+            flow_x = cv.cuda_GpuMat(flow.size(), cv.CV_32FC1)
+            flow_y = cv.cuda_GpuMat(flow.size(), cv.CV_32FC1)
+            cv.cuda.split(flow, [flow_x, flow_y])
 
-        mag, ang = cv.cuda.cartToPolar(flow_x, flow_y, angleInDegrees=True)
+            mag, ang = cv.cuda.cartToPolar(flow_x, flow_y, angleInDegrees=True)
 
-        mean_mag = np.median(mag.download())
-        mean_ang = np.median(ang.download())
+            mean_mag = np.median(mag.download())
+            mean_ang = np.median(ang.download())
 
-        flow = flow.download()
-
-        zoom_in_factor = 0
+            flow = flow.download()
+        else:
+            flow = cv.calcOpticalFlowFarneback(
+                prvs, next_frame, None, 0.5, 3, 15, 3, 5, 1.2, 0
+            )
+            mag, ang = cv.cartToPolar(flow[..., 0], flow[..., 1], angleInDegrees=True)
+            mean_mag = np.median(mag)
+            mean_ang = np.median(ang)
 
         # get the actual pixel coords of the flow
         flow_coords = flow + empty
@@ -182,9 +187,9 @@ def process(inp, show=True):
             if len(zooms) > 10:
                 zooms.pop(0)
 
-            draw_lines(frame2, flow, grid=10)
-            draw_text(frame2, np.mean(mags), np.mean(angs), np.mean(zooms), frame_num)
-            cv.imshow("frame2", frame2)
+            draw_lines(frame, flow, grid=10)
+            draw_text(frame, np.mean(mags), np.mean(angs), np.mean(zooms), frame_num)
+            cv.imshow("Preview", frame)
             k = cv.waitKey(30) & 0xFF
             if k == 27:
                 break
@@ -213,7 +218,7 @@ def process(inp, show=True):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Detect camera motion in videos.')
+    parser = argparse.ArgumentParser(description="Detect camera motion in videos.")
     parser.add_argument(
         "--preview",
         "-p",
@@ -221,7 +226,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Show preview window.",
     )
-    parser.add_argument('path', nargs='+', help='Path of a video or videos.')
+    parser.add_argument(
+        "--gpu",
+        "-g",
+        dest="gpu",
+        action="store_true",
+        help="Use GPU rather than CPU.",
+    )
+    parser.add_argument("path", nargs="+", help="Path of a video or videos.")
 
     args = parser.parse_args()
 
@@ -229,6 +241,6 @@ if __name__ == "__main__":
     for f in files:
         print("Processing", f)
         try:
-            process(f, show=args.preview)
+            process(f, show=args.preview, gpu=args.gpu)
         except Exception as e:
             print(e)
