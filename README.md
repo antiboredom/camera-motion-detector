@@ -6,7 +6,7 @@ NOTE: I'm not great at CV stuff so please excuse the probably not-ideal way of d
 
 ## Usage
 
-`detect.py` will analyze a video frame by frame and record a `csv` file containing average camera motion angle, magnitude and "zoom factor." Zoomy-ness is determined by what percantage of pixels appear to be moving *away* from the center of the image.
+`detect.py` will analyze a video frame by frame and record a `csv` file containing average camera motion angle, magnitude and "zoom factor." Zoomy-ness is determined by what percentage of pixels appear to be moving *away* from the center of the image.
 
 To run:
 
