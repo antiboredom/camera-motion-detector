@@ -33,7 +33,7 @@ You can make use of the generated `csv` file in a few different ways. I've also 
 To save out all the zoom shots:
 
 ```
-python render.py somevideo.mp4 --zooms --outname zooms.mp4
+python render.py somevideo.mp4 --zooms --output zooms.mp4
 ```
 
 If you have mpv installed you can also preview this without rendering a new file:
